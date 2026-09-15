@@ -13,7 +13,7 @@ const app = express();
 // ===================================================================
 const allowedOrigins = process.env.CLIENT_URLS 
     ? process.env.CLIENT_URLS.split(',') 
-    : ['http://localhost:3000','http://localhost:3001', 'http://localhost:3002', 'http://localhost:5173'];
+    : ['https://superadmin.bimtechsolutions.com.ng','https://fountainhills.bimtechsolutions.com.ng', 'http://localhost:3002', 'http://localhost:5173'];
 
 const corsOptions = {
     origin: function (origin, callback) {
