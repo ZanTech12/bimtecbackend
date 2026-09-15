@@ -13,14 +13,16 @@ const app = express();
 // ===================================================================
 const allowedOrigins = process.env.CLIENT_URLS 
     ? process.env.CLIENT_URLS.split(',') 
-    : ['https://www.okispecial.com.ng', 'http://localhost:3002', 'http://localhost:5173'];
+    : ['https://okispecial.com.ng', 'https://www.okispecial.com.ng', 'http://localhost:3002', 'http://localhost:5173'];
 
 const corsOptions = {
     origin: function (origin, callback) {
         if (!origin) return callback(null, true);
         if (allowedOrigins.indexOf(origin) !== -1) return callback(null, true);
         if (origin.includes('lvh.me') || origin.includes('nip.io')) return callback(null, true);
-        if (origin.includes('bimtechsolutions.com.ng')) return callback(null, true);
+        
+        // 👈 THIS IS THE FIX: Changed to okispecial.com.ng!
+        if (origin.includes('okispecial.com.ng')) return callback(null, true);
 
         console.log(`🚫 Blocked by CORS: ${origin}`);
         return callback(new Error('Not allowed by CORS'));
