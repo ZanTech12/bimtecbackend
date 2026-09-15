@@ -8,20 +8,27 @@ require('dotenv').config();
 // Initialize Express App
 const app = express();
 
-// ===================================================================
-// *** 1. CORS CONFIGURATION ***
-// ===================================================================
-const allowedOrigins = process.env.CLIENT_URLS 
+/const allowedOrigins = process.env.CLIENT_URLS 
     ? process.env.CLIENT_URLS.split(',') 
-    : ['https://okispecial.com.ng', 'https://www.okispecial.com.ng', 'http://localhost:3002', 'http://localhost:5173'];
+    : [
+        'https://okispecial.com.ng', 
+        'https://www.okispecial.com.ng', 
+        'http://localhost:3002', 
+        'http://localhost:5173'
+    ];
 
 const corsOptions = {
     origin: function (origin, callback) {
+        // Allow requests with no origin (like Postman or curl)
         if (!origin) return callback(null, true);
+        
+        // 1. Allow exact matches from your .env or defaults
         if (allowedOrigins.indexOf(origin) !== -1) return callback(null, true);
+        
+        // 2. Allow local testing domains
         if (origin.includes('lvh.me') || origin.includes('nip.io')) return callback(null, true);
         
-        // 👈 THIS IS THE FIX: Changed to okispecial.com.ng!
+        // 3. 👈 ALLOW ALL OKISPECIAL SUBDOMAINS (brainfield.okispecial.com.ng, etc.)
         if (origin.includes('okispecial.com.ng')) return callback(null, true);
 
         console.log(`🚫 Blocked by CORS: ${origin}`);
@@ -34,7 +41,6 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-
 // ===================================================================
 // *** 2. GLOBAL MIDDLEWARES ***
 // ===================================================================
