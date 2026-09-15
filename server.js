@@ -8,7 +8,10 @@ require('dotenv').config();
 // Initialize Express App
 const app = express();
 
-/const allowedOrigins = process.env.CLIENT_URLS 
+// ===================================================================
+// *** 1. CORS CONFIGURATION ***
+// ===================================================================
+const allowedOrigins = process.env.CLIENT_URLS 
     ? process.env.CLIENT_URLS.split(',') 
     : [
         'https://okispecial.com.ng', 
@@ -19,7 +22,7 @@ const app = express();
 
 const corsOptions = {
     origin: function (origin, callback) {
-        // Allow requests with no origin (like Postman or curl)
+        // Allow requests with no origin (like Postman, curl, or server-to-server)
         if (!origin) return callback(null, true);
         
         // 1. Allow exact matches from your .env or defaults
@@ -41,6 +44,7 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+
 // ===================================================================
 // *** 2. GLOBAL MIDDLEWARES ***
 // ===================================================================
