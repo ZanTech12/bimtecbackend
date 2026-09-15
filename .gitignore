@@ -4,21 +4,6 @@ node_modules/
 # Environment variables (KEEP THIS IGNORED for security!)
 .env
 
-# Next.js build output
-.next/
-out/
-
-# Backend files (Since Vercel is only building Next.js, we can ignore these)
-server.js
-config/
-controllers/
-middlewares/
-models/
-routes/
-utils/
-prisma/
-prisma.config.ts
-
 # Uploads (Never commit user uploads to git)
 uploads/
 
