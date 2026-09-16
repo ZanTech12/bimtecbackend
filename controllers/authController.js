@@ -9,14 +9,15 @@ const getSchoolCodeFromSubdomain = (req) => {
     const host = req.headers.host || req.headers['x-forwarded-host'] || '';
     const parts = host.split('.');
     
-    if (parts.length > 2 && parts[0] !== 'www') {
-        return parts[0].toUpperCase();
+    // e.g., bestbrain.okispecial.com.ng -> length is 4. parts[0] is 'bestbrain'
+    if (parts.length > 3 && parts[0] !== 'www') {
+        return parts[0].toLowerCase().trim(); // 👈 FORCE LOWERCASE & TRIM
     }
     return null; 
 };
 
 // ===================================================================
-// *** HELPER: Check Expiry Status (Replaces Mongoose Schema Method) ***
+// *** HELPER: Check Expiry Status ***
 // ===================================================================
 const checkExpiryStatus = async (admin) => {
     if (admin.expiryDate && new Date() > admin.expiryDate) {
@@ -42,7 +43,7 @@ exports.login = async (req, res) => {
         
         // --- SUPERADMIN & ADMIN LOGIN ---
         if (role === 'superadmin' || role === 'admin') {
-            let schoolCode = credentials.schoolCode;
+            let schoolCode = credentials.schoolCode?.toLowerCase().trim();
             const subdomainCode = getSchoolCodeFromSubdomain(req);
             if (subdomainCode) schoolCode = subdomainCode;
 
@@ -50,46 +51,57 @@ exports.login = async (req, res) => {
                 // SUBDOMAIN FOUND -> Log in as School Admin
                 user = await prisma.admin.findFirst({ 
                     where: { 
-                        username: credentials.username, 
+                        username: { equals: credentials.username, mode: 'insensitive' }, // 👈 INSENSITIVE USERNAME
                         schoolCode: { equals: schoolCode, mode: 'insensitive' } 
                     } 
                 });
                 
-                if (user && await bcrypt.compare(credentials.password, user.password)) {
-                    const isActive = await checkExpiryStatus(user);
-                    if (!isActive) return res.status(403).json({ success: false, message: 'Account deactivated due to subscription expiry.' });
-                    if (!user.isActive) return res.status(403).json({ success: false, message: 'Account deactivated by SuperAdmin.' });
-
-                    const token = jwt.sign(
-                        { id: user.id, role: 'admin', name: user.name, schoolCode: user.schoolCode }, 
-                        process.env.JWT_SECRET, 
-                        { expiresIn: '24h' }
-                    );
-                    return res.json({ 
-                        success: true, token, 
-                        user: { _id: user.id, name: user.name, username: user.username, role: 'admin', schoolName: user.schoolName } 
-                    });
+                if (!user) {
+                    return res.status(401).json({ success: false, message: 'User not found' });
                 }
+
+                const isMatch = await bcrypt.compare(credentials.password, user.password);
+                if (!isMatch) {
+                    return res.status(401).json({ success: false, message: 'Password mismatch' });
+                }
+
+                const isActive = await checkExpiryStatus(user);
+                if (!isActive) return res.status(403).json({ success: false, message: 'Account deactivated due to subscription expiry.' });
+                if (!user.isActive) return res.status(403).json({ success: false, message: 'Account deactivated by SuperAdmin.' });
+
+                const token = jwt.sign(
+                    { id: user.id, role: 'admin', name: user.name, schoolCode: user.schoolCode }, 
+                    process.env.JWT_SECRET, 
+                    { expiresIn: '24h' }
+                );
+                return res.json({ 
+                    success: true, token, 
+                    user: { _id: user.id, name: user.name, username: user.username, role: 'admin', schoolName: user.schoolName } 
+                });
+                
             } else {
                 // NO SUBDOMAIN FOUND -> Log in as Super Admin
-                user = await prisma.superAdmin.findFirst({ where: { username: credentials.username } });
-                if (user && await bcrypt.compare(credentials.password, user.password)) {
-                    const token = jwt.sign(
-                        { id: user.id, role: 'superadmin', name: user.username }, 
-                        process.env.JWT_SECRET, 
-                        { expiresIn: '24h' }
-                    );
-                    return res.json({ 
-                        success: true, token, 
-                        user: { _id: user.id, name: user.username, role: 'superadmin' } 
-                    });
-                }
+                user = await prisma.superAdmin.findFirst({ where: { username: { equals: credentials.username, mode: 'insensitive' } } });
+                if (!user) return res.status(401).json({ success: false, message: 'SuperAdmin not found' });
+
+                const isMatch = await bcrypt.compare(credentials.password, user.password);
+                if (!isMatch) return res.status(401).json({ success: false, message: 'Password mismatch' });
+
+                const token = jwt.sign(
+                    { id: user.id, role: 'superadmin', name: user.username }, 
+                    process.env.JWT_SECRET, 
+                    { expiresIn: '24h' }
+                );
+                return res.json({ 
+                    success: true, token, 
+                    user: { _id: user.id, name: user.username, role: 'superadmin' } 
+                });
             }
         } 
         
         // --- TEACHER LOGIN ---
         else if (role === 'teacher') {
-            let schoolCode = credentials.schoolCode;
+            let schoolCode = credentials.schoolCode?.toLowerCase().trim();
             const subdomainCode = getSchoolCodeFromSubdomain(req);
             if (subdomainCode) schoolCode = subdomainCode;
             
@@ -100,31 +112,34 @@ exports.login = async (req, res) => {
             });
             if (!school) return res.status(404).json({ success: false, message: 'Invalid school portal.' });
 
-            user = await prisma.teacher.findFirst({ where: { username: credentials.username, adminId: school.id } });
-            if (user && await bcrypt.compare(credentials.password, user.password)) {
-                const loginIP = req.ip || req.headers['x-forwarded-for'] || '';
-                const loginDevice = req.headers['user-agent'] || '';
-                
-                await prisma.teacher.update({
-                    where: { id: user.id },
-                    data: { lastLogin: new Date(), lastLoginIP: loginIP, lastLoginDevice: loginDevice }
-                });
+            user = await prisma.teacher.findFirst({ where: { username: { equals: credentials.username, mode: 'insensitive' }, adminId: school.id } });
+            if (!user) return res.status(401).json({ success: false, message: 'Teacher not found' });
 
-                const token = jwt.sign(
-                    { id: user.id, role: 'teacher', adminId: user.adminId, schoolCode: school.schoolCode }, 
-                    process.env.JWT_SECRET, 
-                    { expiresIn: '24h' }
-                );
-                return res.json({ 
-                    success: true, token, 
-                    user: { _id: user.id, firstName: user.firstName, lastName: user.lastName, username: user.username, role: 'teacher' } 
-                });
-            }
+            const isMatch = await bcrypt.compare(credentials.password, user.password);
+            if (!isMatch) return res.status(401).json({ success: false, message: 'Password mismatch' });
+
+            const loginIP = req.ip || req.headers['x-forwarded-for'] || '';
+            const loginDevice = req.headers['user-agent'] || '';
+            
+            await prisma.teacher.update({
+                where: { id: user.id },
+                data: { lastLogin: new Date(), lastLoginIP: loginIP, lastLoginDevice: loginDevice }
+            });
+
+            const token = jwt.sign(
+                { id: user.id, role: 'teacher', adminId: user.adminId, schoolCode: school.schoolCode }, 
+                process.env.JWT_SECRET, 
+                { expiresIn: '24h' }
+            );
+            return res.json({ 
+                success: true, token, 
+                user: { _id: user.id, firstName: user.firstName, lastName: user.lastName, username: user.username, role: 'teacher' } 
+            });
         }
 
         // --- STUDENT LOGIN ---
         else if (role === 'student') {
-            let schoolCode = credentials.schoolCode;
+            let schoolCode = credentials.schoolCode?.toLowerCase().trim();
             const subdomainCode = getSchoolCodeFromSubdomain(req);
             if (subdomainCode) schoolCode = subdomainCode;
 
@@ -144,24 +159,24 @@ exports.login = async (req, res) => {
                 } 
             });
 
-            if (user) {
-                if (user.owingFees && !user.feesAccessGranted) {
-                    return res.status(403).json({ success: false, message: 'Access denied. Please contact the school administration regarding your outstanding fees.', code: 'FEES_BLOCKED' });
-                }
+            if (!user) return res.status(401).json({ success: false, message: 'Student not found' });
 
-                const token = jwt.sign(
-                    { id: user.id, role: 'student', adminId: user.adminId, schoolCode: school.schoolCode }, 
-                    process.env.JWT_SECRET, 
-                    { expiresIn: '24h' }
-                );
-                return res.json({ 
-                    success: true, token, 
-                    user: { _id: user.id, firstName: user.firstName, lastName: user.lastName, admissionNumber: user.admissionNumber, role: 'student', profileImage: user.profileImage || null } 
-                });
+            if (user.owingFees && !user.feesAccessGranted) {
+                return res.status(403).json({ success: false, message: 'Access denied. Please contact the school administration regarding your outstanding fees.', code: 'FEES_BLOCKED' });
             }
+
+            const token = jwt.sign(
+                { id: user.id, role: 'student', adminId: user.adminId, schoolCode: school.schoolCode }, 
+                process.env.JWT_SECRET, 
+                { expiresIn: '24h' }
+            );
+            return res.json({ 
+                success: true, token, 
+                user: { _id: user.id, firstName: user.firstName, lastName: user.lastName, admissionNumber: user.admissionNumber, role: 'student', profileImage: user.profileImage || null } 
+            });
         }
 
-        res.status(401).json({ success: false, message: 'Invalid credentials' });
+        res.status(401).json({ success: false, message: 'Invalid credentials (Role not recognized)' });
 
     } catch (error) {
         console.error('Login error:', error);
@@ -178,7 +193,7 @@ exports.loginSuperAdmin = async (req, res) => {
     if (!username || !password) return res.status(400).json({ success: false, message: 'Username and password are required.' });
 
     try {
-        const superAdmin = await prisma.superAdmin.findFirst({ where: { username } });
+        const superAdmin = await prisma.superAdmin.findFirst({ where: { username: { equals: username, mode: 'insensitive' } } });
         if (!superAdmin) return res.status(401).json({ success: false, message: 'Invalid credentials.' });
 
         const isMatch = await bcrypt.compare(password, superAdmin.password);
@@ -202,7 +217,7 @@ exports.loginSuperAdmin = async (req, res) => {
 };
 
 // ===================================================================
-// *** 3. DEDICATED ADMIN LOGIN (With Subdomain & Expiry/Limit Checks) ***
+// *** 3. DEDICATED ADMIN LOGIN ***
 // ===================================================================
 exports.loginAdmin = async (req, res) => {
     const { username, password, schoolCode: bodyCode } = req.body;
@@ -210,14 +225,17 @@ exports.loginAdmin = async (req, res) => {
     if (!username || !password) return res.status(400).json({ success: false, message: 'Username and password are required.' });
 
     try {
-        let schoolCode = bodyCode;
+        let schoolCode = bodyCode?.toLowerCase().trim();
         const subdomainCode = getSchoolCodeFromSubdomain(req);
         if (subdomainCode) schoolCode = subdomainCode;
 
         if (!schoolCode) return res.status(400).json({ success: false, message: 'Please login via your school portal link.' });
 
         const admin = await prisma.admin.findFirst({ 
-            where: { username, schoolCode: { equals: schoolCode, mode: 'insensitive' } } 
+            where: { 
+                username: { equals: username, mode: 'insensitive' }, 
+                schoolCode: { equals: schoolCode, mode: 'insensitive' } 
+            } 
         });
         if (!admin) return res.status(401).json({ success: false, message: 'Invalid credentials.' });
 
@@ -252,7 +270,7 @@ exports.loginAdmin = async (req, res) => {
 };
 
 // ===================================================================
-// *** 4. DEDICATED TEACHER LOGIN (With Subdomain & IP/Device Tracking) ***
+// *** 4. DEDICATED TEACHER LOGIN ***
 // ===================================================================
 exports.loginTeacher = async (req, res) => {
     const { username, password, schoolCode: bodyCode } = req.body;
@@ -260,7 +278,7 @@ exports.loginTeacher = async (req, res) => {
     if (!username || !password) return res.status(400).json({ success: false, message: 'Username and password are required.' });
 
     try {
-        let schoolCode = bodyCode;
+        let schoolCode = bodyCode?.toLowerCase().trim();
         const subdomainCode = getSchoolCodeFromSubdomain(req);
         if (subdomainCode) schoolCode = subdomainCode;
 
@@ -271,7 +289,7 @@ exports.loginTeacher = async (req, res) => {
         });
         if (!school) return res.status(404).json({ success: false, message: 'Invalid school portal.' });
 
-        const teacher = await prisma.teacher.findFirst({ where: { username, adminId: school.id } });
+        const teacher = await prisma.teacher.findFirst({ where: { username: { equals: username, mode: 'insensitive' }, adminId: school.id } });
         if (!teacher) return res.status(401).json({ success: false, message: 'Invalid credentials.' });
 
         const isMatch = await bcrypt.compare(password, teacher.password);
@@ -309,7 +327,7 @@ exports.loginTeacher = async (req, res) => {
 };
 
 // ===================================================================
-// *** 5. DEDICATED STUDENT LOGIN (With Subdomain & Fee Checking) ***
+// *** 5. DEDICATED STUDENT LOGIN ***
 // ===================================================================
 exports.loginStudent = async (req, res) => {
     const { admissionNumber, firstName, lastName, schoolCode: bodyCode } = req.body;
@@ -317,7 +335,7 @@ exports.loginStudent = async (req, res) => {
     if (!admissionNumber || !firstName) return res.status(400).json({ success: false, message: 'Admission Number and First Name are required.' });
 
     try {
-        let schoolCode = bodyCode;
+        let schoolCode = bodyCode?.toLowerCase().trim();
         const subdomainCode = getSchoolCodeFromSubdomain(req);
         if (subdomainCode) schoolCode = subdomainCode;
 
