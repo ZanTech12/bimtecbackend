@@ -272,8 +272,9 @@ exports.createWeek = async (req, res) => {
                 data: {
                     title,
                     classId: parseInt(cId),
-                    teacherId: parseInt(id), 
-                    adminId: parseInt(id)
+                    adminId: parseInt(id),
+                    // 👈 FIX: Only set teacherId if the role is teacher, otherwise null
+                    teacherId: role === 'teacher' ? parseInt(id) : null 
                 }
             });
             createdWeeks.push(newWeek);
@@ -285,7 +286,6 @@ exports.createWeek = async (req, res) => {
         res.status(500).json({ success: false, message: error.message });
     }
 };
-
 // ============================================
 // UPLOAD PDF FILES TO A WEEK (Using Raw SQL + Auto-Add Columns)
 // ============================================
