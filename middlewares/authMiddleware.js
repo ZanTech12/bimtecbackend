@@ -5,7 +5,14 @@ exports.authenticateToken = (req, res, next) => {
         const authHeader = req.header('Authorization');
         console.log('[DEBUG Auth] Authorization Header:', authHeader ? authHeader.substring(0, 30) + '...' : 'MISSING');
 
-        const token = authHeader && authHeader.split(' ')[1];
+        let token = authHeader && authHeader.split(' ')[1];
+
+        // --- NEW: Fallback to URL query parameter for WebBrowser/PDF viewers ---
+        if (!token && req.query.token) {
+            token = req.query.token;
+            console.log('[DEBUG Auth] SUCCESS: Found token in URL query parameter.');
+        }
+        // ----------------------------------------------------------------------
 
         if (!token) {
             console.log('[DEBUG Auth] FAILED: No token provided');
@@ -14,6 +21,7 @@ exports.authenticateToken = (req, res, next) => {
 
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         console.log('[DEBUG Auth] SUCCESS: Token decoded. Role:', decoded.role);
+        
         // ✅ normalize role to lowercase so 'Admin'/'ADMIN' never 403 by accident
         const user = decoded.user || decoded;
         req.user = { ...user, role: String(user.role || '').toLowerCase() };

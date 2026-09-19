@@ -61,9 +61,6 @@ const resolveTermAndSession = async (termId, sessionId) => {
     }
 };
 
-// Note: This is the old generateAdmissionNumber function. 
-// We already replaced this in studentController.js with a better version that uses SiteInformation, 
-// but I have translated it to Prisma here just in case you use it elsewhere.
 const generateAdmissionNumber = async () => {
     const currentYear = new Date().getFullYear();
     const prefix = 'DIS';
