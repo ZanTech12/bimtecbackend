@@ -5,6 +5,9 @@ const bcrypt = require('bcrypt');
 const path = require('path'); // 👈 Added to handle file paths for uploads
 require('dotenv').config();
 
+// Import the auth middleware
+const { authenticateToken } = require('./middlewares/authMiddleware'); 
+
 // Initialize Express App
 const app = express();
 
@@ -51,8 +54,23 @@ app.use(cors(corsOptions));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Serve static files from the 'uploads' directory
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// ===================================================================
+// *** SECURE STATIC FILE SERVING FOR UPLOADS ***
+// ===================================================================
+// We replaced the standard express.static with this custom route.
+// It forces the request to pass through authenticateToken first.
+app.get('/uploads/*', authenticateToken, (req, res) => {
+    // req.path will be something like /uploads/enotes/file.pdf
+    const filePath = path.join(__dirname, req.path);
+    
+    // Send the file if authentication passed
+    res.sendFile(filePath, (err) => {
+        if (err) {
+            console.error('File send error:', err);
+            res.status(404).json({ success: false, message: 'File not found' });
+        }
+    });
+});
 
 // ===================================================================
 // *** 3. DATABASE CONNECTION ***
