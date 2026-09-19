@@ -57,11 +57,11 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 // ===================================================================
 // *** SECURE STATIC FILE SERVING FOR UPLOADS ***
 // ===================================================================
-// We replaced the standard express.static with this custom route.
+// We replaced the standard express.static with this custom middleware.
 // It forces the request to pass through authenticateToken first.
-app.get('/uploads/*', authenticateToken, (req, res) => {
-    // req.path will be something like /uploads/enotes/file.pdf
-    const filePath = path.join(__dirname, req.path);
+app.use('/uploads', authenticateToken, (req, res) => {
+    // req.path will be something like /enotes/file.pdf
+    const filePath = path.join(__dirname, 'uploads', req.path);
     
     // Send the file if authentication passed
     res.sendFile(filePath, (err) => {
